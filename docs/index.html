@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yana — Native macOS Container Management</title>
+  <meta name="description" content="Yana is a native macOS desktop GUI for managing containers. Built with Tauri, React, and Rust. macOS 14+." />
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Exact app design tokens ── */
+    :root {
+      --bg-app:       #161618;
+      --bg-sidebar:   #0f0f11;
+      --bg-surface:   #1c1c1e;
+      --bg-elevated:  #252528;
+      --bg-control:   #3a3a3c;
+      --bg-hover:     rgba(255, 255, 255, 0.055);
+      --bg-active:    rgba(0, 122, 255, 0.18);
+
+      --text-primary:   #f5f5f7;
+      --text-secondary: #aeaeb2;
+      --text-muted:     #8e8e93;
+      --text-caption:   #636366;
+
+      --border:        rgba(84, 84, 88, 0.55);
+      --border-subtle: rgba(84, 84, 88, 0.28);
+
+      --accent:        #007aff;
+      --accent-hover:  #0a84ff;
+      --green:         #34c759;
+      --red:           #ff3b30;
+      --yellow:        #ff9f0a;
+      --purple:        #bf5af2;
+      --teal:          #64d2ff;
+
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+
+      --font: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      --mono: "SF Mono", "Menlo", "Monaco", "Cascadia Code", monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg-app);
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-control); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #636366; }
+
+    /* ── NAV ── */
+    .nav-wrap {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 12px clamp(1.25rem, 5vw, 3.5rem);
+      pointer-events: none;
+    }
+
+    nav {
+      pointer-events: all;
+      max-width: 860px;
+      margin: 0 auto;
+      background: rgba(22, 22, 24, 0.72);
+      backdrop-filter: blur(28px) saturate(200%);
+      -webkit-backdrop-filter: blur(28px) saturate(200%);
+      border: 0.5px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 0 6px 0 10px;
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow:
+        0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      padding: 5px 6px;
+      border-radius: var(--radius-md);
+      transition: background 0.15s;
+    }
+
+    .nav-logo:hover { background: var(--bg-hover); }
+
+    .nav-logo img {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      flex-shrink: 0;
+    }
+
+    .nav-logo-text {
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 5px 10px;
+      border-radius: var(--radius-md);
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-links a:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+
+    .nav-links .nav-cta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: white;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 10px;
+      margin-left: 4px;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset, 0 2px 8px rgba(0,122,255,0.35);
+    }
+
+    .nav-links .nav-cta:hover {
+      background: var(--accent-hover);
+      color: white;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      padding: clamp(5rem, 12vw, 8rem) clamp(1.25rem, 5vw, 3.5rem) clamp(4rem, 8vw, 6rem);
+      max-width: 740px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      background: rgba(0, 122, 255, 0.12);
+      border: 0.5px solid rgba(0, 122, 255, 0.3);
+      border-radius: 20px;
+      padding: 4px 12px;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: fadeUp 0.5s ease forwards 0.1s;
+    }
+
+    .hero-badge-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    h1 {
+      font-size: clamp(3rem, 9vw, 5.5rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--text-primary);
+      margin-bottom: 1.25rem;
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.6s ease forwards 0.2s;
+    }
+
+    h1 .accent { color: var(--accent); }
+
+    .hero-tagline {
+      font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+      color: var(--text-secondary);
+      max-width: 500px;
+      margin: 0 auto 2.25rem;
+      line-height: 1.65;
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.6s ease forwards 0.35s;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.6s ease forwards 0.5s;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--accent);
+      color: white;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font);
+      padding: 8px 18px;
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font);
+      padding: 8px 18px;
+      border-radius: var(--radius-md);
+      text-decoration: none;
+      border: 0.5px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.15s;
+    }
+
+    .btn-secondary:hover { background: var(--bg-control); transform: translateY(-1px); }
+
+    .hero-meta {
+      margin-top: 1rem;
+      font-size: 12px;
+      color: var(--text-caption);
+      font-family: var(--mono);
+      opacity: 0;
+      animation: fadeUp 0.5s ease forwards 0.65s;
+    }
+
+    /* ── APP PREVIEW ── */
+    .preview-wrap {
+      padding: 0 clamp(1.25rem, 5vw, 3.5rem) clamp(4rem, 8vw, 6rem);
+      max-width: 1080px;
+      margin: 0 auto;
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+
+    .preview-wrap.visible { opacity: 1; transform: translateY(0); }
+
+    .macos-window {
+      background: var(--bg-sidebar);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 32px 64px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.04);
+    }
+
+    .macos-titlebar {
+      background: var(--bg-surface);
+      padding: 11px 14px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      border-bottom: 0.5px solid var(--border-subtle);
+    }
+
+    .traffic-lights { display: flex; gap: 6px; }
+
+    .tl { width: 12px; height: 12px; border-radius: 50%; }
+    .tl-close  { background: #ff5f57; }
+    .tl-min    { background: #febc2e; }
+    .tl-max    { background: #28c840; }
+
+    .titlebar-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-caption);
+      margin: 0 auto;
+    }
+
+    .screenshot-placeholder {
+      aspect-ratio: 16 / 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border: 0.5px dashed rgba(0, 122, 255, 0.25);
+      margin: 16px;
+      border-radius: var(--radius-md);
+      background: rgba(0, 122, 255, 0.03);
+    }
+
+    .placeholder-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-surface);
+      border: 0.5px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .placeholder-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-caption);
+    }
+
+    .placeholder-sub {
+      font-size: 12px;
+      color: var(--text-caption);
+      opacity: 0.6;
+    }
+
+    /* ── COMMON SECTION ── */
+    section {
+      padding: clamp(3.5rem, 8vw, 6rem) clamp(1.25rem, 5vw, 3.5rem);
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-caption);
+      margin-bottom: 8px;
+    }
+
+    .section-title {
+      font-size: clamp(1.4rem, 3.5vw, 2rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+
+    .section-sub {
+      font-size: 14px;
+      color: var(--text-secondary);
+      max-width: 480px;
+      line-height: 1.6;
+      margin-bottom: 2.5rem;
+    }
+
+    /* ── FEATURES GRID ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 0.5px;
+      background: var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 0.5px solid var(--border-subtle);
+    }
+
+    .feature-card {
+      background: var(--bg-surface);
+      padding: 1.5rem;
+      transition: background 0.15s;
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 0.45s ease, transform 0.45s ease, background 0.15s;
+    }
+
+    .feature-card.visible { opacity: 1; transform: translateY(0); }
+    .feature-card:hover { background: var(--bg-elevated); }
+
+    .feature-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      border: 0.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .feature-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .feature-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    .feature-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 12px;
+    }
+
+    .pill {
+      background: var(--bg-elevated);
+      border: 0.5px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 2px 8px;
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--text-caption);
+    }
+
+    /* ── SCREENSHOTS GRID ── */
+    .screenshots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+
+    .screenshot-card {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .screenshot-card.visible { opacity: 1; transform: translateY(0); }
+
+    .screenshot-card-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-family: var(--mono);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .screenshot-card-label::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+
+    .mini-window {
+      background: var(--bg-sidebar);
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border);
+      overflow: hidden;
+    }
+
+    .mini-titlebar {
+      background: var(--bg-surface);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border-bottom: 0.5px solid var(--border-subtle);
+    }
+
+    .mini-tl {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .mini-placeholder {
+      aspect-ratio: 16 / 9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 0.5px dashed var(--border-subtle);
+      margin: 10px;
+      border-radius: var(--radius-sm);
+    }
+
+    .mini-placeholder-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-caption);
+      opacity: 0.5;
+    }
+
+    .mini-window {
+      cursor: zoom-in;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .mini-window:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    /* ── LIGHTBOX ── */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .lightbox.open { display: flex; }
+
+    .lightbox-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .lightbox.open .lightbox-backdrop { opacity: 1; }
+
+    .lightbox-window {
+      position: relative;
+      z-index: 1;
+      background: var(--bg-sidebar);
+      border-radius: var(--radius-lg);
+      border: 0.5px solid var(--border);
+      overflow: hidden;
+      width: min(860px, 100%);
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,255,255,0.04);
+      opacity: 0;
+      transform: scale(0.94);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .lightbox.open .lightbox-window {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .lightbox-titlebar {
+      background: var(--bg-surface);
+      padding: 11px 14px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      border-bottom: 0.5px solid var(--border-subtle);
+    }
+
+    .lightbox-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-caption);
+      margin: 0 auto;
+    }
+
+    .lightbox-body { overflow: hidden; }
+
+    .lightbox-img {
+      width: 100%;
+      display: block;
+      max-height: calc(90vh - 44px);
+      object-fit: contain;
+      object-position: top center;
+    }
+
+    .mini-img {
+      width: 100%;
+      display: block;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      object-position: top left;
+    }
+
+    .hero-screenshot-img {
+      width: 100%;
+      display: block;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      object-position: top left;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--bg-elevated);
+      border: 0.5px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 2;
+      transition: background 0.15s;
+    }
+
+    .lightbox-close:hover { background: var(--bg-control); }
+
+    /* ── TECH STACK ── */
+    .divider-line {
+      height: 0.5px;
+      background: var(--border-subtle);
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .tech-card {
+      background: var(--bg-surface);
+      border: 0.5px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.45s ease, transform 0.45s ease, border-color 0.15s;
+    }
+
+    .tech-card.visible { opacity: 1; transform: translateY(0); }
+    .tech-card:hover { border-color: var(--border); }
+
+    .tech-name {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .tech-role {
+      font-size: 12px;
+      color: var(--text-caption);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 2.5rem clamp(1.25rem, 5vw, 3.5rem);
+      max-width: 1080px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .footer-brand {
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+
+    .footer-meta {
+      font-size: 12px;
+      color: var(--text-caption);
+      margin-top: 3px;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 4px;
+    }
+
+    .footer-links a {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 5px 10px;
+      border-radius: var(--radius-md);
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .footer-links a:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      .nav-links li:not(:last-child) { display: none; }
+      .features-grid { grid-template-columns: 1fr; }
+      .screenshots-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<div class="nav-wrap">
+  <nav>
+    <a href="#" class="nav-logo">
+      <img src="icon.png" alt="Yana icon" />
+      <span class="nav-logo-text">yana</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#screenshots">Screenshots</a></li>
+      <li><a href="#stack">Stack</a></li>
+      <li>
+        <a href="https://github.com/hashb/yana" target="_blank" rel="noopener" class="nav-cta">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+            <path d="M7 0C3.13 0 0 3.13 0 7c0 3.09 2 5.71 4.79 6.64.35.06.48-.15.48-.34 0-.16-.01-.71-.01-1.3-1.76.32-2.21-.43-2.35-.82-.08-.2-.42-.82-.72-.99-.24-.13-.59-.45-.01-.46.55-.01.94.51 1.07.72.63 1.06 1.64.76 2.04.58.06-.46.25-.76.45-.93-1.56-.18-3.19-.78-3.19-3.46 0-.76.27-1.39.72-1.88-.07-.18-.31-.9.07-1.86 0 0 .59-.19 1.93.72.56-.16 1.16-.24 1.75-.24.59 0 1.19.08 1.75.24 1.34-.91 1.93-.72 1.93-.72.38.96.14 1.68.07 1.86.45.49.72 1.11.72 1.88 0 2.69-1.64 3.28-3.2 3.46.25.22.47.64.47 1.29 0 .94-.01 1.69-.01 1.93 0 .19.13.41.48.34C12 12.71 14 10.09 14 7c0-3.87-3.13-7-7-7z"/>
+          </svg>
+          GitHub
+        </a>
+      </li>
+    </ul>
+  </nav>
+</div>
+
+<!-- ── HERO ── -->
+<div class="hero">
+  <div class="hero-badge">
+    <div class="hero-badge-dot"></div>
+    v0.1.0 &mdash; Initial Release
+  </div>
+
+  <h1>Ya<span class="accent">na</span></h1>
+
+  <p class="hero-tagline">
+    A native macOS GUI for managing containers.
+    Start, stop, inspect, and monitor — no terminal required.
+  </p>
+
+  <div class="hero-actions">
+    <a href="https://github.com/0x2a-labs/yana/releases/latest" class="btn-primary" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <path d="M7 1v8M3.5 5.5L7 9l3.5-3.5M1.5 11.5h11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Download for macOS
+    </a>
+    <a href="https://github.com/0x2a-labs/yana" class="btn-secondary" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
+        <path d="M7 0C3.13 0 0 3.13 0 7c0 3.09 2 5.71 4.79 6.64.35.06.48-.15.48-.34 0-.16-.01-.71-.01-1.3-1.76.32-2.21-.43-2.35-.82-.08-.2-.42-.82-.72-.99-.24-.13-.59-.45-.01-.46.55-.01.94.51 1.07.72.63 1.06 1.64.76 2.04.58.06-.46.25-.76.45-.93-1.56-.18-3.19-.78-3.19-3.46 0-.76.27-1.39.72-1.88-.07-.18-.31-.9.07-1.86 0 0 .59-.19 1.93.72.56-.16 1.16-.24 1.75-.24.59 0 1.19.08 1.75.24 1.34-.91 1.93-.72 1.93-.72.38.96.14 1.68.07 1.86.45.49.72 1.11.72 1.88 0 2.69-1.64 3.28-3.2 3.46.25.22.47.64.47 1.29 0 .94-.01 1.69-.01 1.93 0 .19.13.41.48.34C12 12.71 14 10.09 14 7c0-3.87-3.13-7-7-7z"/>
+      </svg>
+      View source
+    </a>
+  </div>
+
+  <p class="hero-meta">macOS 14+ &nbsp;&middot;&nbsp; Requires container CLI &nbsp;&middot;&nbsp; Free &amp; open source</p>
+</div>
+
+<!-- ── APP PREVIEW ── -->
+<div class="preview-wrap" id="preview">
+  <div class="macos-window">
+    <div class="macos-titlebar">
+      <div class="traffic-lights">
+        <div class="tl tl-close"></div>
+        <div class="tl tl-min"></div>
+        <div class="tl tl-max"></div>
+      </div>
+      <span class="titlebar-label">Yana &mdash; Containers</span>
+    </div>
+    <img
+      src="containers.png"
+      class="hero-screenshot-img"
+      alt="Yana app screenshot"
+      id="hero-img"
+      style="cursor:zoom-in;"
+    />
+  </div>
+</div>
+
+<!-- ── FEATURES ── -->
+<section id="features">
+  <p class="section-label">Features</p>
+  <h2 class="section-title">Everything containers, in one place</h2>
+  <p class="section-sub">Seven focused views covering the full container lifecycle — from running new images to monitoring live resource usage.</p>
+
+  <div class="features-grid">
+
+    <div class="feature-card" data-delay="0">
+      <div class="feature-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1" y="2.5" width="14" height="4" rx="1.5" stroke="var(--accent)" stroke-width="1.5"/>
+          <rect x="1" y="9.5" width="14" height="4" rx="1.5" stroke="var(--accent)" stroke-width="1.5" opacity="0.4"/>
+          <circle cx="13" cy="4.5" r="1" fill="var(--accent)"/>
+        </svg>
+      </div>
+      <p class="feature-name">Containers</p>
+      <p class="feature-desc">Full lifecycle management. Live CPU, memory, network I/O, and block I/O stats. Run containers with custom ports, volumes, env vars, and resource limits. Open a shell directly in Terminal.app.</p>
+      <div class="feature-pills">
+        <span class="pill">stats</span>
+        <span class="pill">logs</span>
+        <span class="pill">shell</span>
+        <span class="pill">run</span>
+        <span class="pill">inspect</span>
+      </div>
+    </div>
+
+    <div class="feature-card" data-delay="50">
+      <div class="feature-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="var(--accent)" stroke-width="1.5"/>
+          <path d="M5.5 8h5M8 5.5v5" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+      </div>
+      <p class="feature-name">Images</p>
+      <p class="feature-desc">Browse local images with repository tags, digest hashes, sizes, and media types. Pull from any registry, inspect metadata, and delete unused images to reclaim disk space.</p>
+      <div class="feature-pills">
+        <span class="pill">pull</span>
+        <span class="pill">inspect</span>
+        <span class="pill">delete</span>
+      </div>
+    </div>
+
+    <div class="feature-card" data-delay="100">
+      <div class="feature-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="6" stroke="var(--accent)" stroke-width="1.5"/>
+          <path d="M2 8h12" stroke="var(--accent)" stroke-width="1" opacity="0.4"/>
+          <path d="M8 2c-2 2-2 10 0 12" stroke="var(--accent)" stroke-width="1" stroke-linecap="round" opacity="0.4"/>
+        </svg>
+      </div>
+      <p class="feature-name">Networks</p>
+      <p class="feature-desc">List networks with status, mode, subnet, and gateway info — both IPv4 and IPv6. Create networks with custom subnets or remove ones no longer needed.</p>
+      <div class="feature-pills">
+        <span class="pill">subnet</span>
+        <span class="pill">gateway</span>
+        <span class="pill">create</span>
+      </div>
+    </div>
+
+    <div class="feature-card" data-delay="150">
+      <div class="feature-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="var(--accent)" stroke-width="1.5" opacity="0.35"/>
+          <path d="M4 6.5h8M4 9.5h8" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <p class="feature-name">Volumes</p>
+      <p class="feature-desc">Manage persistent container volumes. View volume details and track usage — all without touching the terminal.</p>
+      <div class="feature-pills">
+        <span class="pill">list</span>
+        <span class="pill">inspect</span>
+      </div>
+    </div>
+
+    <div class="feature-card" data-delay="200">
+      <div class="feature-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="2" y="7" width="12" height="7" rx="1.5" stroke="var(--accent)" stroke-width="1.5"/>
+          <path d="M5 7V5a3 3 0 116 0v2" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+        </svg>
+      </div>
+      <p class="feature-name">DNS</p>
+      <p class="feature-desc">Inspect container DNS configuration at a glance. View nameservers, search domains, and DNS options — useful for debugging connectivity inside containers.</p>
+      <div class="feature-pills">
+        <span class="pill">nameservers</span>
+        <span class="pill">search domains</span>
+      </div>
+    </div>
+
+    <div class="feature-card" data-delay="250">
+      <div class="feature-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.5" stroke="var(--accent)" stroke-width="1.5"/>
+          <rect x="9" y="1.5" width="5.5" height="5.5" rx="1.5" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"/>
+          <rect x="1.5" y="9" width="5.5" height="5.5" rx="1.5" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"/>
+          <rect x="9" y="9" width="5.5" height="5.5" rx="1.5" stroke="var(--accent)" stroke-width="1.5" opacity="0.25"/>
+        </svg>
+      </div>
+      <p class="feature-name">System</p>
+      <p class="feature-desc">Disk usage by containers, images, and volumes with reclaimable space. Adjust system properties, monitor builder status, and start/stop/restart the container runtime.</p>
+      <div class="feature-pills">
+        <span class="pill">disk usage</span>
+        <span class="pill">properties</span>
+        <span class="pill">start / stop</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── SCREENSHOTS ── -->
+<section id="screenshots" style="padding-top:0;">
+  <p class="section-label">Screenshots</p>
+  <h2 class="section-title">See it in action</h2>
+  <p class="section-sub">Screenshots for each view will appear here as the app matures.</p>
+
+  <div class="screenshots-grid">
+
+    <div class="screenshot-card" data-delay="0">
+      <p class="screenshot-card-label">Containers view</p>
+      <div class="mini-window" data-label="Containers view" data-src="containers.png" data-fallback="containers.svg">
+        <div class="mini-titlebar">
+          <div class="mini-tl" style="background:#ff5f57"></div>
+          <div class="mini-tl" style="background:#febc2e"></div>
+          <div class="mini-tl" style="background:#28c840"></div>
+        </div>
+        <img src="containers.png" onerror="this.onerror=null;this.src='containers.svg'" class="mini-img" alt="Containers view screenshot" />
+      </div>
+    </div>
+
+    <div class="screenshot-card" data-delay="70">
+      <p class="screenshot-card-label">Images view</p>
+      <div class="mini-window" data-label="Images view" data-src="images.png" data-fallback="images.svg">
+        <div class="mini-titlebar">
+          <div class="mini-tl" style="background:#ff5f57"></div>
+          <div class="mini-tl" style="background:#febc2e"></div>
+          <div class="mini-tl" style="background:#28c840"></div>
+        </div>
+        <img src="images.png" onerror="this.onerror=null;this.src='images.svg'" class="mini-img" alt="Images view screenshot" />
+      </div>
+    </div>
+
+    <div class="screenshot-card" data-delay="140">
+      <p class="screenshot-card-label">System view</p>
+      <div class="mini-window" data-label="System view" data-src="system.png" data-fallback="system.svg">
+        <div class="mini-titlebar">
+          <div class="mini-tl" style="background:#ff5f57"></div>
+          <div class="mini-tl" style="background:#febc2e"></div>
+          <div class="mini-tl" style="background:#28c840"></div>
+        </div>
+        <img src="system.png" onerror="this.onerror=null;this.src='system.svg'" class="mini-img" alt="System view screenshot" />
+      </div>
+    </div>
+
+    <div class="screenshot-card" data-delay="0">
+      <p class="screenshot-card-label">Networks view</p>
+      <div class="mini-window" data-label="Networks view" data-src="networks.png" data-fallback="networks.svg">
+        <div class="mini-titlebar">
+          <div class="mini-tl" style="background:#ff5f57"></div>
+          <div class="mini-tl" style="background:#febc2e"></div>
+          <div class="mini-tl" style="background:#28c840"></div>
+        </div>
+        <img src="networks.png" onerror="this.onerror=null;this.src='networks.svg'" class="mini-img" alt="Networks view screenshot" />
+      </div>
+    </div>
+
+    <div class="screenshot-card" data-delay="70">
+      <p class="screenshot-card-label">Volumes view</p>
+      <div class="mini-window" data-label="Volumes view" data-src="volumes.png" data-fallback="volumes.svg">
+        <div class="mini-titlebar">
+          <div class="mini-tl" style="background:#ff5f57"></div>
+          <div class="mini-tl" style="background:#febc2e"></div>
+          <div class="mini-tl" style="background:#28c840"></div>
+        </div>
+        <img src="volumes.png" onerror="this.onerror=null;this.src='volumes.svg'" class="mini-img" alt="Volumes view screenshot" />
+      </div>
+    </div>
+
+    <div class="screenshot-card" data-delay="140">
+      <p class="screenshot-card-label">Settings view</p>
+      <div class="mini-window" data-label="Settings view" data-src="settings.png" data-fallback="settings.svg">
+        <div class="mini-titlebar">
+          <div class="mini-tl" style="background:#ff5f57"></div>
+          <div class="mini-tl" style="background:#febc2e"></div>
+          <div class="mini-tl" style="background:#28c840"></div>
+        </div>
+        <img src="settings.png" onerror="this.onerror=null;this.src='settings.svg'" class="mini-img" alt="Settings view screenshot" />
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── TECH STACK ── -->
+<div class="divider-line"></div>
+
+<section id="stack">
+  <p class="section-label">Built with</p>
+  <h2 class="section-title">Native performance, modern stack</h2>
+  <p class="section-sub">Tauri wraps a Rust backend and a React + TypeScript frontend into a tiny, fast native app — no Electron, no web bloat.</p>
+
+  <div class="tech-grid">
+    <div class="tech-card" data-delay="0">
+      <p class="tech-name">Tauri 2</p>
+      <p class="tech-role">Desktop framework</p>
+    </div>
+    <div class="tech-card" data-delay="60">
+      <p class="tech-name">Rust</p>
+      <p class="tech-role">Backend / system bridge</p>
+    </div>
+    <div class="tech-card" data-delay="120">
+      <p class="tech-name">React 19</p>
+      <p class="tech-role">UI framework</p>
+    </div>
+    <div class="tech-card" data-delay="180">
+      <p class="tech-name">TypeScript</p>
+      <p class="tech-role">Type-safe frontend</p>
+    </div>
+    <div class="tech-card" data-delay="240">
+      <p class="tech-name">Vite 7</p>
+      <p class="tech-role">Build tool</p>
+    </div>
+  </div>
+</section>
+
+<div class="divider-line"></div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div>
+    <p class="footer-brand">yana</p>
+    <p class="footer-meta">by Chenna Kautilya &nbsp;&middot;&nbsp; macOS 14+ &nbsp;&middot;&nbsp; MIT License</p>
+  </div>
+  <div class="footer-links">
+    <a href="https://github.com/0x2a-labs/yana" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/0x2a-labs/yana/releases" target="_blank" rel="noopener">Releases</a>
+    <a href="https://github.com/0x2a-labs/yana/issues" target="_blank" rel="noopener">Issues</a>
+  </div>
+</footer>
+
+<!-- ── LIGHTBOX ── -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
+  <div class="lightbox-backdrop" id="lightbox-backdrop"></div>
+  <div class="lightbox-window">
+    <div class="lightbox-titlebar">
+      <div class="traffic-lights">
+        <div class="tl tl-close"></div>
+        <div class="tl tl-min"></div>
+        <div class="tl tl-max"></div>
+      </div>
+      <span class="lightbox-label" id="lightbox-label"></span>
+    </div>
+    <div class="lightbox-body">
+      <img src="" class="lightbox-img" alt="" id="lightbox-img" />
+    </div>
+    <button class="lightbox-close" id="lightbox-close" aria-label="Close">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <path d="M1 1l8 8M9 1L1 9" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const el = entry.target;
+      setTimeout(() => el.classList.add('visible'), parseInt(el.dataset.delay || '0', 10));
+      io.unobserve(el);
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.feature-card, .tech-card, .screenshot-card, .preview-wrap').forEach(el => io.observe(el));
+
+  // Lightbox
+  const lightbox = document.getElementById('lightbox');
+  const lightboxLabel = document.getElementById('lightbox-label');
+  const lightboxImg = document.getElementById('lightbox-img');
+
+  function openLightbox(label, src) {
+    lightboxLabel.textContent = 'Yana \u2014 ' + label;
+    lightboxImg.src = src;
+    lightboxImg.alt = label;
+    lightbox.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    lightbox.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('lightbox-backdrop').addEventListener('click', closeLightbox);
+  document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+  document.querySelectorAll('.screenshot-card').forEach(card => {
+    const win = card.querySelector('.mini-window');
+    const label = card.querySelector('.screenshot-card-label').textContent;
+    const img = card.querySelector('.mini-img');
+    win.addEventListener('click', () => openLightbox(label, img.currentSrc || img.src));
+  });
+
+  document.getElementById('hero-img').addEventListener('click', () => {
+    openLightbox('Containers view', document.getElementById('hero-img').src);
+  });
+</script>
+
+</body>
+</html>
